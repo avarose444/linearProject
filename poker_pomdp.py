@@ -3,9 +3,9 @@ import mdptoolbox
 import matplotlib.pyplot as plt
 import pomdp_py
 
-#defining state space
+#state space
 stages = ["preflop", "flop", "turn", "river"]
-hand_strengths = ["weak", "medium", "strong"]
+hand_strengths = ["weak", "neutral", "strong"]
 pot_sizes = ["small", "medium", "large"]
 
 states = [
@@ -15,11 +15,23 @@ states = [
     for pot in pot_sizes
 ]
 
-#define action space
+#action space
 actions = {
     0: "fold",
     1: "check_call",
     2: "bet_raise"
 }
 
-print("Actions: ", actions)
+#observation space
+opponent_actions = ["opp_fold", "opp_check", "opp_bet"]
+board_strengths = ["neutral_board", "strong_board"]
+observed_pot_sizes = ["small_pot", "medium_pot", "large_pot"]
+
+observations = [
+    (opponent_action, board, pot)
+    for opponent_action in opponent_actions
+    for board in board_strengths
+    for pot in observed_pot_sizes
+]
+
+print("observations: ", observations)
