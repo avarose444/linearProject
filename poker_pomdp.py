@@ -43,18 +43,44 @@ def transition_function(state, action):
     if action == "fold":
         return{}
     elif action == "check_call":
-        return {
-            (next_stage, hand_strength, pot_size): 0.8,
-            (next_stage, "medium", pot_size): 0.2 if hand_strength=="weak" else 0.1, 
-            (next_stage, "strong", pot_size): 0.1 if hand_strength!="strong" else 0.0,
-        }
+        if hand_strength == "weak":
+            return {
+                (next_stage, "weak", pot_size): 0.7,
+                (next_stage, "neutral", pot_size): 0.2,
+                (next_stage, "strong", pot_size): 0.1,
+            }
+        elif hand_strength == "neutral":
+            return {
+                (next_stage, "weak", pot_size): 0.1,
+                (next_stage, "neutral", pot_size): 0.6,
+                (next_stage, "strong", pot_size): 0.3,
+            }
+        elif hand_strength == "strong":
+            return {
+                (next_stage, "weak", pot_size): 0.0,
+                (next_stage, "neutral", pot_size): 0.2,
+                (next_stage, "strong", pot_size): 0.8,
+            }
     elif action == "bet_raise":
         next_pot_size = {"small": "medium", "medium": "large", "large": "large"}[pot_size]
-        return {
-            (next_stage, hand_strength, next_pot_size): 0.6,
-            (next_stage, "medium", next_pot_size): 0.3 if hand_strength == "weak" else 0.2,
-            (next_stage, "strong", next_pot_size): 0.1,
-        }
+        if hand_strength == "weak":
+            return {
+                (next_stage, "weak", next_pot_size): 0.5,
+                (next_stage, "neutral", next_pot_size): 0.3,
+                (next_stage, "strong", next_pot_size): 0.2,
+            }
+        elif hand_strength == "neutral":
+            return {
+                (next_stage, "weak", next_pot_size): 0.1,
+                (next_stage, "neutral", next_pot_size): 0.5,
+                (next_stage, "strong", next_pot_size): 0.4,
+            }
+        elif hand_strength == "strong":
+            return {
+                (next_stage, "weak", next_pot_size): 0.0,
+                (next_stage, "neutral", next_pot_size): 0.1,
+                (next_stage, "strong", next_pot_size): 0.9,
+            }
     else: 
         raise ValueError("Unknown action: {}".format(action))
     
@@ -62,3 +88,8 @@ transition_table = {}
 for state in states:
     for action in actions.values():
         transition_table[(state, action)] = transition_function(state, action)
+
+state = ("turn", "weak", "small")
+action = "fold"
+transition_result = transition_function(state, action)
+print(transition_result)
