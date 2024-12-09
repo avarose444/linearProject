@@ -1,6 +1,7 @@
 import numpy as np
 import mdptoolbox
 import matplotlib.pyplot as plt
+import pomdp_py
 
 # 1. Define the MDP Components
 
