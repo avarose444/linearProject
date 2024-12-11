@@ -34,6 +34,7 @@ observations = [
     for pot in observed_pot_sizes
 ]
 
+#state transitions
 def transition_function(state, action):
     stage, hand_strength, pot_size = state
 
@@ -89,7 +90,44 @@ for state in states:
     for action in actions.values():
         transition_table[(state, action)] = transition_function(state, action)
 
-state = ("turn", "weak", "small")
-action = "fold"
-transition_result = transition_function(state, action)
-print(transition_result)
+#rewards
+def reward_function(state, action):
+    stage, hand_strength, pot_size = state
+
+    pot_value = {"small":10, "medium":50, "large":100}[pot_size]
+    hand_value = {"weak":-10, "neutral":0, "strong":10}[hand_strength]
+
+    if action == "fold":
+        return -pot_value * 0.2
+    elif action == "check_call":
+        if hand_strength == "weak":
+            return -5
+        elif hand_strength == "neutral":
+            return 0
+        elif hand_strength == "strong":
+            return 10
+    elif action == "bet_raise":
+        if hand_strength == "weak":
+            return -20
+        elif hand_strength == "neutral":
+            return 10
+        elif hand_strength == "strong":
+            return pot_value * 0.5
+    else:
+        raise ValueError("Unknown action: {}".format(action))
+
+def final_reward(winning, pot_size):
+    pot_value = {"small":10, "medium":50, "large":100}[pot_size]
+
+    if winning: 
+        return pot_value
+    else: 
+        return -pot_value
+
+reward_table = {}
+for state in states:
+    for action in actions.values():
+        reward_table[(state, action)] = reward_function(state, action)
+
+# Example usage
+print(reward_table[(("flop", "weak", "small"), "fold")])  # Accessing a specific reward
