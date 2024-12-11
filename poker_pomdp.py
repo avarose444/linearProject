@@ -4,6 +4,28 @@ import mdptoolbox
 import matplotlib.pyplot as plt
 import pomdp_py
 
+class PokerState(pomdp_py.State):
+    def __init__(self, stage, hand_strength, pot_size):
+        self.stage = stage
+        self.hand_strength = hand_strength
+        self.pot_size = pot_size 
+
+    def __hash__(self):
+        return hash((self.stage, self.hand_strength, self.pot_size))
+
+    def __eq__(self, other):
+        return (
+            self.stage == other.stage and
+            self.hand_strength == other.hand_strength and 
+            self.pot_size == other.pot_size
+        )
+
+    def __str__(self):
+        return f"PokerState(stage={self.stage}, hand_strength={self.hand_strength}, pot_size={self.pot_size})"
+
+    def as_tuple(self):
+        return (self.stage, self.hand_strength, self.pot_size)
+
 ### DEFINING POMDP COMPONENTS ###
 
 #state space
@@ -12,7 +34,7 @@ hand_strengths = ["weak", "neutral", "strong"]
 pot_sizes = ["small", "medium", "large"]
 
 states = [
-    (stage, hand, pot)
+    PokerState(stage, hand, pot)
     for stage in stages
     for hand in hand_strengths
     for pot in pot_sizes
@@ -91,7 +113,11 @@ def transition_function(state, action):
 transition_table = {}
 for state in states:
     for action in actions.values():
-        transition_table[(state, action)] = transition_function(state, action)
+        state_tuple = state.as_tuple()
+        next_states = transition_function(state_tuple, action)
+        transition_table[(state, action)] = {
+            PokerState(*next_state): prob for next_state, prob in next_states.items()
+        }
 
 #rewards
 def reward_function(state, action):
@@ -130,14 +156,14 @@ def final_reward(winning, pot_size):
 reward_table = {}
 for state in states:
     for action in actions.values():
-        reward_table[(state, action)] = reward_function(state, action)
+        reward_table[(state, action)] = reward_function(state.as_tuple(), action)
 
 #observations
 
 #function returns probability distribution over all possible observations 
 def observation_function(state, action, next_state):
-    stage, hand_strength, pot_size = state
-    next_stage, next_hand_strength, next_pot_size = next_state
+    stage, hand_strength, pot_size = state.as_tuple()
+    next_stage, next_hand_strength, next_pot_size = next_state.as_tuple()
 
     if action == "fold":
         return {}
