@@ -1,7 +1,10 @@
 import numpy as np
+import random
 import mdptoolbox
 import matplotlib.pyplot as plt
 import pomdp_py
+
+### DEFINING POMDP COMPONENTS ###
 
 #state space
 stages = ["preflop", "flop", "turn", "river"]
@@ -185,9 +188,42 @@ for state in states:
         for next_state in states: 
             observation_table[(state, action, next_state)] = observation_function(state, action, next_state)
 
-state = ("flop", "neutral", "small")
-action = "check_call"
-next_state = ("turn", "strong", "small")
-observations = observation_function(state, action, next_state)
+### DEFINING POMDP ENVIRONMENT/AGENT ###
 
-print(observations)
+class PokerEnvironment(pomdp_py.Environment):
+    def __init__(self, states, transition_table, reward_table):
+        self.states = states
+        self.transition_table = transition_table
+        self.reward_table = reward_table
+
+        initial_state = random.choice(states)
+        super().__init__(initial_state)
+
+    def transition(self, state, action):
+        return self.transition_table.get((state, action), {})
+
+    def reward(self, state, action):
+        return self.reward_table.get((state, action), 0)
+
+    def state_transition(self, action):
+        transition_probs = self.transition(self.state, action)
+        if not transition_probs:
+            return None
+        
+        next_state = random.choices(
+            list(transition_probs.keys()),
+            weights=list(transition_probs.values())
+        )[0]
+        self.state = next_state
+
+poker_env = PokerEnvironment(states, transition_table, reward_table)
+
+initial_state = poker_env.state
+print("Initial State:", initial_state)
+
+action = "check_call"  # Example action
+poker_env.state_transition(action)
+print("New State:", poker_env.state)
+
+reward = poker_env.reward(initial_state, action)
+print("Reward:", reward)
