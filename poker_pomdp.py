@@ -129,5 +129,65 @@ for state in states:
     for action in actions.values():
         reward_table[(state, action)] = reward_function(state, action)
 
-# Example usage
-print(reward_table[(("flop", "weak", "small"), "fold")])  # Accessing a specific reward
+#observations
+
+#function returns probability distribution over all possible observations 
+def observation_function(state, action, next_state):
+    stage, hand_strength, pot_size = state
+    next_stage, next_hand_strength, next_pot_size = next_state
+
+    if action == "fold":
+        return {}
+    elif action == "check_call":
+        opp_action_prob = {
+            "opp_fold": 0.2,
+            "opp_check": 0.5,
+            "opp_bet": 0.3,
+        }
+    elif action == "bet_raise":
+        opp_action_prob = {
+            "opp_fold": 0.4, 
+            "opp_check": 0.3,
+            "opp_bet": 0.3,
+        }
+    else: 
+        raise ValueError("Unknown action: {}".format(action))
+
+    if next_hand_strength == "strong":
+        board_state_prob = {
+            "neutral_board": 0.4,
+            "strong_board": 0.6,
+        }
+    elif next_hand_strength == "neutral":
+        board_state_prob = {
+            "neutral_board": 0.6,
+            "strong_board": 0.4,
+        }
+    elif next_hand_strength == "weak":
+        board_state_prob = {
+            "neutral_board": 0.8,
+            "strong_board": 0.2,
+        }
+
+    observed_pot_size = f"{next_pot_size}_pot"
+
+    observations = {}
+    for opp_action, opp_prob in opp_action_prob.items():
+        for board_state, board_prob in board_state_prob.items():
+            obs = (opp_action, board_state, observed_pot_size)
+            observations[obs] = opp_prob * board_prob
+
+    return observations
+
+observation_table = {}
+for state in states: 
+    for action in actions.values():
+        for next_state in states: 
+            observation_table[(state, action, next_state)] = observation_function(state, action, next_state)
+
+state = ("flop", "neutral", "small")
+action = "check_call"
+next_state = ("turn", "strong", "small")
+observations = observation_function(state, action, next_state)
+
+print(observations)
