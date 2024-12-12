@@ -230,7 +230,7 @@ class PokerEnvironment(pomdp_py.Environment):
 
     def reward(self, state, action):
         return self.reward_table.get((state, action), 0)
-
+    
     def state_transition(self, action):
         transition_probs = self.transition(self.state, action)
         if not transition_probs:
@@ -240,14 +240,15 @@ class PokerEnvironment(pomdp_py.Environment):
             list(transition_probs.keys()),
             weights=list(transition_probs.values())
         )[0]
-        self.state = next_state
+        
+        self.apply_transition(next_state)
 
 poker_env = PokerEnvironment(states, transition_table, reward_table)
 
 initial_state = poker_env.state
 print("Initial State:", initial_state)
 
-action = "check_call"  # Example action
+action = "bet_raise"  # Example action
 poker_env.state_transition(action)
 print("New State:", poker_env.state)
 
