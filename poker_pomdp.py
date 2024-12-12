@@ -2,72 +2,6 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 import pomdp_py
-from pomdp_py import POMCP
-from pomdp_py import Particles
-from pomdp_py import Action
-
-### necessary class definitions to make sure solver works ###
-
-class PokerState(pomdp_py.State):
-    def __init__(self, stage, hand_strength, pot_size):
-        self.stage = stage
-        self.hand_strength = hand_strength
-        self.pot_size = pot_size 
-
-    def __hash__(self):
-        return hash((self.stage, self.hand_strength, self.pot_size))
-
-    def __eq__(self, other):
-        return (
-            self.stage == other.stage and
-            self.hand_strength == other.hand_strength and 
-            self.pot_size == other.pot_size
-        )
-
-    def __str__(self):
-        return f"PokerState(stage={self.stage}, hand_strength={self.hand_strength}, pot_size={self.pot_size})"
-
-    def as_tuple(self):
-        return (self.stage, self.hand_strength, self.pot_size)
-
-class FoldAction(pomdp_py.Action):
-    def __init__(self):
-        super().__init__()
-
-    def __str__(self):
-        return "fold"
-
-    def __eq__(self, other):
-        return isinstance(other, FoldAction)
-
-    def __hash__(self):
-        return hash("fold")
-    
-class CheckCallAction(pomdp_py.Action):
-    def __init__(self):
-        super().__init__()
-
-    def __str__(self):
-        return "check_call"
-
-    def __eq__(self, other):
-        return isinstance(other, CheckCallAction)
-
-    def __hash__(self):
-        return hash("check_call")
-
-class BetRaiseAction(pomdp_py.Action):
-    def __init__(self):
-        super().__init__()
-
-    def __str__(self):
-        return "bet_raise"
-
-    def __eq__(self, other):
-        return isinstance(other, BetRaiseAction)
-
-    def __hash__(self):
-        return hash("bet_raise")
 
 ### DEFINING POMDP COMPONENTS ###
 
@@ -77,7 +11,7 @@ hand_strengths = ["weak", "neutral", "strong"]
 pot_sizes = ["small", "medium", "large"]
 
 states = [
-    PokerState(stage, hand, pot)
+    (stage, hand, pot)
     for stage in stages
     for hand in hand_strengths
     for pot in pot_sizes
@@ -85,9 +19,9 @@ states = [
 
 #action space
 actions = {
-    0: FoldAction(),
-    1: CheckCallAction(),
-    2: BetRaiseAction()
+    0: "fold",
+    1: "check_call",
+    2: "bet_raise"
 }
 
 #observation space
@@ -109,9 +43,9 @@ def transition_function(state, action):
     stage_order = ["preflop", "flop", "turn", "river"]
     next_stage = stage_order[stage_order.index(stage)+1] if stage != "river" else "river"
 
-    if isinstance(action, FoldAction):
+    if action == "fold":
         return{}
-    elif isinstance(action, CheckCallAction):
+    elif action == "check_call":
         if hand_strength == "weak":
             return {
                 (next_stage, "weak", pot_size): 0.7,
@@ -130,7 +64,7 @@ def transition_function(state, action):
                 (next_stage, "neutral", pot_size): 0.2,
                 (next_stage, "strong", pot_size): 0.8,
             }
-    elif isinstance(action, BetRaiseAction):
+    elif action == "bet_raise":
         next_pot_size = {"small": "medium", "medium": "large", "large": "large"}[pot_size]
         if hand_strength == "weak":
             return {
@@ -156,12 +90,8 @@ def transition_function(state, action):
 transition_table = {}
 for state in states:
     for action in actions.values():
-        state_tuple = state.as_tuple()
-        next_states = transition_function(state_tuple, action)
-        transition_table[(state, action)] = {
-            PokerState(*next_state): prob for next_state, prob in next_states.items()
-        }
-
+        next_states = transition_function(state, action)
+        transition_table[(state, action)] = next_states
 #rewards
 def reward_function(state, action):
     stage, hand_strength, pot_size = state
@@ -169,16 +99,16 @@ def reward_function(state, action):
     pot_value = {"small":10, "medium":50, "large":100}[pot_size]
     hand_value = {"weak":-10, "neutral":0, "strong":10}[hand_strength]
 
-    if isinstance(action, FoldAction):
+    if action == "fold":
         return -pot_value * 0.2
-    elif isinstance(action, CheckCallAction):
+    elif action == "check_call":
         if hand_strength == "weak":
             return -5
         elif hand_strength == "neutral":
             return 0
         elif hand_strength == "strong":
             return 10
-    elif isinstance(action, BetRaiseAction):
+    elif action == "bet_raise":
         if hand_strength == "weak":
             return -20
         elif hand_strength == "neutral":
@@ -199,24 +129,24 @@ def final_reward(winning, pot_size):
 reward_table = {}
 for state in states:
     for action in actions.values():
-        reward_table[(state, action)] = reward_function(state.as_tuple(), action)
+        reward_table[(state, action)] = reward_function(state, action)
 
 #observations
 
 #function returns probability distribution over all possible observations 
 def observation_function(state, action, next_state):
-    stage, hand_strength, pot_size = state.as_tuple()
-    next_stage, next_hand_strength, next_pot_size = next_state.as_tuple()
+    stage, hand_strength, pot_size = state
+    next_stage, next_hand_strength, next_pot_size = next_state
 
-    if isinstance(action, FoldAction):
+    if action == "fold":
         return {}
-    elif isinstance(action, CheckCallAction):
+    elif action == "check_call":
         opp_action_prob = {
             "opp_fold": 0.2,
             "opp_check": 0.5,
             "opp_bet": 0.3,
         }
-    elif isinstance(action, BetRaiseAction):
+    elif action == "bet_raise":
         opp_action_prob = {
             "opp_fold": 0.4, 
             "opp_check": 0.3,
@@ -259,6 +189,16 @@ for state in states:
 
 ### DEFINING POMDP ENVIRONMENT/AGENT ###
 
+class PokerState(pomdp_py.State):
+    def __init__(self, stage, hand_strength, pot_size):
+        self.stage = stage
+        self.hand_strength = hand_strength
+        self.pot_size = pot_size
+    
+    def __repr__(self):
+        return f"({self.stage}, {self.hand_strength}, {self.pot_size})"
+
+
 class PokerEnvironment(pomdp_py.Environment):
     def __init__(self, states, transition_table, reward_table):
         self.states = states
@@ -266,7 +206,8 @@ class PokerEnvironment(pomdp_py.Environment):
         self.reward_table = reward_table
 
         initial_state = random.choice(states)
-        super().__init__(initial_state)
+        self_state = PokerState(*initial_state)
+        super().__init__(self_state)
 
     def transition(self, state, action):
         return self.transition_table.get((state, action), {})
@@ -288,77 +229,64 @@ class PokerEnvironment(pomdp_py.Environment):
 
 poker_env = PokerEnvironment(states, transition_table, reward_table)
 
-### SOLVING THE POMDP ## 
+V = {state: 0 for state in states}
+gamma = 0.9
+epsilon = 0.01
+max_iterations = 100
 
-class PokerTransitionModel(pomdp_py.TransitionModel):
-    def probability(self, next_state, state, action):
-        trans_probs = transition_function(state.as_tuple(), action)
-        return trans_probs.get(next_state.as_tuple())
+def value_iteration():
+    global V
+    poker_env = PokerEnvironment(states, transition_table, reward_table)
 
-    def sample(self, state, action):
-        trans_probs = transition_function(state.as_tuple())
-        next_states = list(trans_probs.keys())
-        probabilities = list(trans_probs.values())
-        return random.choices(next_states, weights=probabilities)[0]
+    for iteration in range(max_iterations):
+        delta = 0
+        for state in states:
+            max_value = float('-inf')
 
-class PokerRewardModel(pomdp_py.RewardModel):
-    def sample(self, state, action, next_state):
-        return reward_function(state.as_tuple(), action)
+            for action in actions.values():
+                expected_value = 0
 
-class PokerObservationModel(pomdp_py.ObservationModel):
-    def probability(self, observation, next_state, action):
-        obs_probs = observation_function(state, action, next_state)
-        return obs_probs.get(observation, 0)
+                transition_probs = poker_env.transition(state, action)
 
-    def sample(self, next_state, action):
-        obs_probs = observation_function(state, action, next_state)
-        observations = list(obs_probs.keys())
-        probabilities = list(obs_probs.values())
-        return random.choices(observations, weights=probabilities)[0]
+                for next_state, trans_prob in transition_probs.items():
+                    reward = poker_env.reward(state, action)
+                    expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
+                
+                max_value = max(max_value, expected_value)
+            
+            delta = max(delta, abs(V[state] - max_value))
+            V[state] = max_value
+        
+        if delta < epsilon:
+            print(f"Value iteration converged after {iteration + 1} iterations")
+            break
 
-class PokerPolicyModel(pomdp_py.framework.basics.PolicyModel):
-    def __init__(self, actions):
-        self._actions = actions
+def extract_policy():
+    policy = {}
+    poker_env = PokerEnvironment(states, transition_table, reward_table)
 
-    def sample(self, state):
-        return random.choice(list(self._actions.values()))
+    for state in states:
+        best_action = None
+        max_value = float('-inf')
 
-    def argmax(self, state):
-        return "check_call"
+        for action in actions.values():
+            expected_value = 0
 
-    def get_all_actions(self, state=None, history=None):
-        print("get_all_actions called")
-        return self._actions.values()
+            transition_probs = poker_env.transition(state, action)
 
-class PokerAgent(pomdp_py.Agent):
-    def __init__(self, belief, policy_model, transition_model, observation_model, reward_model):
-        super().__init__(belief, policy_model, transition_model, observation_model, reward_model)
+            for next_state, trans_prob in transition_probs.items():
+                reward = poker_env.reward(state, action)
+                expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
 
-def create_poker_belief(states, num_particles=100):
-    particles = [states[i % len(states)] for i in range(num_particles)]
-    belief = pomdp_py.Particles(particles)
-    return belief
+            if expected_value > max_value:
+                max_value = expected_value
+                best_action = action
+            
+        policy[state] = best_action
+    
+    return policy
 
-belief = create_poker_belief(states)
-policy_model = PokerPolicyModel(actions)
-transition_model = PokerTransitionModel()
-reward_model = PokerRewardModel()
-observation_model = PokerObservationModel()
-agent = PokerAgent(belief, policy_model, transition_model, observation_model, reward_model)
-solver = POMCP()
-
-# Simulate one decision-making step
-print("calling solver plan")
-action = solver.plan(agent)  # Decide action based on belief and model
-# print("Action chosen:", action)
-
-# # Environment responds
-# poker_env.state_transition(action)
-# new_observation = poker_env.observe(agent)
-# reward = poker_env.reward(agent.state, action)
-
-# print("New Observation:", new_observation)
-# print("Reward received:", reward)
-
-# # Update agent's belief
-# agent.update(action, new_observation)
+value_iteration()
+optimal_policy = extract_policy()
+for state, action in optimal_policy.items():
+    print(f"State: {state}, Optimal Action: {action}")
