@@ -15,7 +15,7 @@ states = [
     for stage in stages
     for hand in hand_strengths
     for pot in pot_sizes
-]
+] + [("end", "none", "none")]
 
 #action space
 actions = {
@@ -40,49 +40,53 @@ observations = [
 def transition_function(state, action):
     stage, hand_strength, pot_size = state
 
+    if stage == "end":
+        return {}
+    
     stage_order = ["preflop", "flop", "turn", "river"]
     next_stage = stage_order[stage_order.index(stage)+1] if stage != "river" else "river"
 
     if action == "fold":
-        return{}
-    elif action == "check_call":
+        if hand_strength == "weak":
+            return {("end", "none", "none"): 1.0}
+    elif action == "check_call": 
         if hand_strength == "weak":
             return {
-                (next_stage, "weak", pot_size): 0.7,
-                (next_stage, "neutral", pot_size): 0.2,
+                (next_stage, "weak", pot_size): 0.6,
+                (next_stage, "neutral", pot_size): 0.3,
                 (next_stage, "strong", pot_size): 0.1,
             }
         elif hand_strength == "neutral":
             return {
-                (next_stage, "weak", pot_size): 0.1,
-                (next_stage, "neutral", pot_size): 0.6,
-                (next_stage, "strong", pot_size): 0.3,
+                (next_stage, "weak", pot_size): 0.3,
+                (next_stage, "neutral", pot_size): 0.5,
+                (next_stage, "strong", pot_size): 0.2,
             }
         elif hand_strength == "strong":
             return {
-                (next_stage, "weak", pot_size): 0.0,
-                (next_stage, "neutral", pot_size): 0.2,
-                (next_stage, "strong", pot_size): 0.8,
+                (next_stage, "weak", pot_size): 0.1,
+                (next_stage, "neutral", pot_size): 0.3,
+                (next_stage, "strong", pot_size): 0.6,
             }
     elif action == "bet_raise":
         next_pot_size = {"small": "medium", "medium": "large", "large": "large"}[pot_size]
         if hand_strength == "weak":
             return {
-                (next_stage, "weak", next_pot_size): 0.5,
-                (next_stage, "neutral", next_pot_size): 0.3,
-                (next_stage, "strong", next_pot_size): 0.2,
+                (next_stage, "weak", next_pot_size): 0.7,
+                (next_stage, "neutral", next_pot_size): 0.2,
+                (next_stage, "strong", next_pot_size): 0.1,
             }
         elif hand_strength == "neutral":
             return {
-                (next_stage, "weak", next_pot_size): 0.1,
+                (next_stage, "weak", next_pot_size): 0.2,
                 (next_stage, "neutral", next_pot_size): 0.5,
-                (next_stage, "strong", next_pot_size): 0.4,
+                (next_stage, "strong", next_pot_size): 0.3,
             }
         elif hand_strength == "strong":
             return {
-                (next_stage, "weak", next_pot_size): 0.0,
-                (next_stage, "neutral", next_pot_size): 0.1,
-                (next_stage, "strong", next_pot_size): 0.9,
+                (next_stage, "weak", next_pot_size): 0.1,
+                (next_stage, "neutral", next_pot_size): 0.2,
+                (next_stage, "strong", next_pot_size): 0.7,
             }
     else: 
         raise ValueError("Unknown action: {}".format(action))
@@ -96,14 +100,20 @@ for state in states:
 def reward_function(state, action):
     stage, hand_strength, pot_size = state
 
+    if stage == "end":
+        return {}
+
     pot_value = {"small":10, "medium":50, "large":100}[pot_size]
     hand_value = {"weak":-10, "neutral":0, "strong":10}[hand_strength]
 
     if action == "fold":
-        return -pot_value * 0.2
+        if hand_strength == "weak":
+            return 0
+        else:
+            return -pot_value * 0.2
     elif action == "check_call":
         if hand_strength == "weak":
-            return -5
+            return -10
         elif hand_strength == "neutral":
             return 0
         elif hand_strength == "strong":
@@ -138,6 +148,9 @@ def observation_function(state, action, next_state):
     stage, hand_strength, pot_size = state
     next_stage, next_hand_strength, next_pot_size = next_state
 
+    if stage == "end":
+        return {}
+   
     if action == "fold":
         return {}
     elif action == "check_call":
@@ -169,6 +182,10 @@ def observation_function(state, action, next_state):
         board_state_prob = {
             "neutral_board": 0.8,
             "strong_board": 0.2,
+        }
+    else:
+        board_state_prob = {
+            "no_board": 1.0,
         }
 
     observed_pot_size = f"{next_pot_size}_pot"
@@ -230,7 +247,7 @@ class PokerEnvironment(pomdp_py.Environment):
 poker_env = PokerEnvironment(states, transition_table, reward_table)
 
 V = {state: 0 for state in states}
-gamma = 0.9
+gamma = 0.6
 epsilon = 0.01
 max_iterations = 100
 
@@ -241,6 +258,8 @@ def value_iteration():
     for iteration in range(max_iterations):
         delta = 0
         for state in states:
+            if state == ("end", "none", "none"):
+                continue
             max_value = float('-inf')
 
             for action in actions.values():
@@ -248,9 +267,12 @@ def value_iteration():
 
                 transition_probs = poker_env.transition(state, action)
 
-                for next_state, trans_prob in transition_probs.items():
-                    reward = poker_env.reward(state, action)
-                    expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
+                if transition_probs:
+                    for next_state, trans_prob in transition_probs.items():
+                        reward = poker_env.reward(state, action)
+                        expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
+                else:
+                    expected_value = 0
                 
                 max_value = max(max_value, expected_value)
             
@@ -274,9 +296,12 @@ def extract_policy():
 
             transition_probs = poker_env.transition(state, action)
 
-            for next_state, trans_prob in transition_probs.items():
-                reward = poker_env.reward(state, action)
-                expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
+            if transition_probs:
+                for next_state, trans_prob in transition_probs.items():
+                    reward = poker_env.reward(state, action)
+                    expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
+            else:
+                expected_value = 0
 
             if expected_value > max_value:
                 max_value = expected_value
