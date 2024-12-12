@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import pomdp_py
 from pomdp_py import POMCP
 from pomdp_py import Particles
+from pomdp_py import Action
 
 ### necessary class definitions to make sure solver works ###
 
@@ -326,7 +327,7 @@ class PokerPolicyModel(pomdp_py.PolicyModel):
         return "check_call"
 
     def get_all_actions(self, state=None, history=None):
-        return {FoldAction(), CheckCallAction(), BetRaiseAction}
+        return {FoldAction(), CheckCallAction(), BetRaiseAction()}
 
 class PokerAgent(pomdp_py.Agent):
     def __init__(self, belief, policy_model, transition_model, observation_model, reward_model):
