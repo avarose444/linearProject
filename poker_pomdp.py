@@ -316,7 +316,7 @@ class PokerObservationModel(pomdp_py.ObservationModel):
         probabilities = list(obs_probs.values())
         return random.choices(observations, weights=probabilities)[0]
 
-class PokerPolicyModel(pomdp_py.PolicyModel):
+class PokerPolicyModel(pomdp_py.framework.basics.PolicyModel):
     def __init__(self, actions):
         self._actions = actions
 
@@ -327,7 +327,8 @@ class PokerPolicyModel(pomdp_py.PolicyModel):
         return "check_call"
 
     def get_all_actions(self, state=None, history=None):
-        return {FoldAction(), CheckCallAction(), BetRaiseAction()}
+        print("get_all_actions called")
+        return self._actions.values()
 
 class PokerAgent(pomdp_py.Agent):
     def __init__(self, belief, policy_model, transition_model, observation_model, reward_model):
@@ -347,8 +348,9 @@ agent = PokerAgent(belief, policy_model, transition_model, observation_model, re
 solver = POMCP()
 
 # Simulate one decision-making step
+print("calling solver plan")
 action = solver.plan(agent)  # Decide action based on belief and model
-print("Action chosen:", action)
+# print("Action chosen:", action)
 
 # # Environment responds
 # poker_env.state_transition(action)
