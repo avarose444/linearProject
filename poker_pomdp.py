@@ -41,7 +41,7 @@ def transition_function(state, action):
     stage, hand_strength, pot_size = state
 
     if stage == "end":
-        return {}
+        return {("end", hand_strength, pot_size): 1.0}
     
     stage_order = ["preflop", "flop", "turn", "river"]
     next_stage = stage_order[stage_order.index(stage)+1] if stage != "river" else "river"
@@ -244,74 +244,109 @@ class PokerEnvironment(pomdp_py.Environment):
         
         self.apply_transition(next_state)
 
+class BeliefState:
+    def __init__(self, states):
+        self.beliefs = {state: 1/len(states) for state in states}
+
+    def update(self, action, observation, transition_function, observation_function):
+        new_beliefs = {}
+
+        for state in self.beliefs:
+            belief = self.beliefs[state]
+            transition_probs = transition_function.get((state, action), {})
+            observation_prob = observation_function.get((state, observation), 0)
+            new_beliefs[state] = belief * sum(transition_probs.get(next_state, 0) * observation_prob for next_state in transition_probs)
+        
+        total = sum(new_beliefs.values())
+        if total > 0:
+            for state in new_beliefs:
+                new_beliefs[state] /= total
+        self.beliefs = new_beliefs
+
+    def most_likely_state(self):
+        return max(self.beliefs, key=self.beliefs.get)
+
 poker_env = PokerEnvironment(states, transition_table, reward_table)
 
-V = {state: 0 for state in states}
-gamma = 0.6
-epsilon = 0.01
-max_iterations = 100
-
-def value_iteration():
-    global V
-    poker_env = PokerEnvironment(states, transition_table, reward_table)
+def value_iteration(belief_state, max_iterations=100, gamma=0.6, epsilon=0.01):
+    V = {state: 0 for state in states}
 
     for iteration in range(max_iterations):
         delta = 0
-        for state in states:
-            if state == ("end", "none", "none"):
-                continue
-            max_value = float('-inf')
-
+        new_V = {}
+        for belief in belief_state.beliefs:
+            expected_values = []
             for action in actions.values():
                 expected_value = 0
-
-                transition_probs = poker_env.transition(state, action)
-
-                if transition_probs:
-                    for next_state, trans_prob in transition_probs.items():
-                        reward = poker_env.reward(state, action)
-                        expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
-                else:
-                    expected_value = 0
-                
-                max_value = max(max_value, expected_value)
+                for state, belief_prob in belief_state.beliefs.items():
+                    transition_probs = transition_table.get((state, action), {})
+                    if transition_probs:
+                        for next_state, trans_prob in transition_probs.items():
+                            obs_probs = observation_table.get((state, action, next_state), {})
+                            for obs, obs_prob in obs_probs.items():
+                                reward = reward_table.get((state, action), 0)
+                                expected_value += (
+                                    belief_prob * trans_prob * obs_prob * (reward + gamma + V.get(next_state, 0))
+                                )
+                expected_values.append(expected_value)
             
-            delta = max(delta, abs(V[state] - max_value))
-            V[state] = max_value
+            best_value = max(expected_values)
+            new_V[belief] = best_value
+            delta = max(delta, abs(V[belief] - best_value))
         
+        V.update(new_V)
         if delta < epsilon:
-            print(f"Value iteration converged after {iteration + 1} iterations")
-            break
+                print(f"Belief Value Iteration converged after {iteration + 1} iterations")
+                break
+        return V
 
-def extract_policy():
+def extract_policy(belief_state, V, gamma=0.6):
     policy = {}
-    poker_env = PokerEnvironment(states, transition_table, reward_table)
-
-    for state in states:
+    for belief in belief_state.beliefs:
         best_action = None
         max_value = float('-inf')
 
         for action in actions.values():
             expected_value = 0
 
-            transition_probs = poker_env.transition(state, action)
-
-            if transition_probs:
-                for next_state, trans_prob in transition_probs.items():
-                    reward = poker_env.reward(state, action)
-                    expected_value += trans_prob * (reward + gamma * V.get(next_state, 0))
-            else:
-                expected_value = 0
-
+            for state, belief_prob in belief_state.beliefs.items():
+                transition_probs = transition_table.get((state, action), {})
+                if transition_probs:
+                    for next_state, trans_prob in transition_probs.items():
+                        obs_probs = observation_table.get((state, action, next_state), {})
+                        for obs, obs_prob in obs_probs.items():
+                            reward = reward_table.get((state, action), 0)
+                            expected_value += (
+                                belief_prob * trans_prob * obs_prob * (reward + gamma * V.get(next_state, 0))
+                            )
+            
             if expected_value > max_value:
                 max_value = expected_value
                 best_action = action
-            
-        policy[state] = best_action
-    
-    return policy
+            policy[belief] = best_action
 
-value_iteration()
-optimal_policy = extract_policy()
-for state, action in optimal_policy.items():
-    print(f"State: {state}, Optimal Action: {action}")
+        return policy
+
+states = [
+    ('preflop', 'weak', 'small'), ('preflop', 'weak', 'medium'), ('preflop', 'weak', 'large'),
+    ('preflop', 'neutral', 'small'), ('preflop', 'neutral', 'medium'), ('preflop', 'neutral', 'large'),
+    ('preflop', 'strong', 'small'), ('preflop', 'strong', 'medium'), ('preflop', 'strong', 'large'),
+    ('flop', 'weak', 'small'), ('flop', 'weak', 'medium'), ('flop', 'weak', 'large'),
+    ('flop', 'neutral', 'small'), ('flop', 'neutral', 'medium'), ('flop', 'neutral', 'large'),
+    ('flop', 'strong', 'small'), ('flop', 'strong', 'medium'), ('flop', 'strong', 'large'),
+    ('turn', 'weak', 'small'), ('turn', 'weak', 'medium'), ('turn', 'weak', 'large'),
+    ('turn', 'neutral', 'small'), ('turn', 'neutral', 'medium'), ('turn', 'neutral', 'large'),
+    ('turn', 'strong', 'small'), ('turn', 'strong', 'medium'), ('turn', 'strong', 'large'),
+    ('river', 'weak', 'small'), ('river', 'weak', 'medium'), ('river', 'weak', 'large'),
+    ('river', 'neutral', 'small'), ('river', 'neutral', 'medium'), ('river', 'neutral', 'large'),
+    ('river', 'strong', 'small'), ('river', 'strong', 'medium'), ('river', 'strong', 'large'),
+    ('end', 'none', 'none')
+]
+
+initial_belief_state = BeliefState(states)
+belief_values = value_iteration(initial_belief_state)
+optimal_policy = extract_policy(initial_belief_state, belief_values)
+print(optimal_policy)
+
+# for belief, action in optimal_policy.items():
+#     print(f"Belief: {belief}, Action: {action}")
