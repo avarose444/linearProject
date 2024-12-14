@@ -15,7 +15,7 @@ states = [
     for stage in stages
     for hand in hand_strengths
     for pot in pot_sizes
-] + [("end", "none", "none")]
+]
 
 #action space
 actions = {
@@ -39,16 +39,12 @@ observations = [
 #state transitions
 def transition_function(state, action):
     stage, hand_strength, pot_size = state
-
-    if stage == "end":
-        return {("end", hand_strength, pot_size): 1.0}
     
     stage_order = ["preflop", "flop", "turn", "river"]
     next_stage = stage_order[stage_order.index(stage)+1] if stage != "river" else "river"
 
     if action == "fold":
-        if hand_strength == "weak":
-            return {("end", "none", "none"): 1.0}
+        return {}
     elif action == "check_call": 
         if hand_strength == "weak":
             return {
@@ -96,45 +92,103 @@ for state in states:
     for action in actions.values():
         next_states = transition_function(state, action)
         transition_table[(state, action)] = next_states
+
 #rewards
 def reward_function(state, action):
     stage, hand_strength, pot_size = state
 
-    if stage == "end":
-        return {}
-
     pot_value = {"small":10, "medium":50, "large":100}[pot_size]
-    hand_value = {"weak":-10, "neutral":0, "strong":10}[hand_strength]
 
-    if action == "fold":
+    if stage == "preflop":
         if hand_strength == "weak":
-            return 0
-        else:
-            return -pot_value * 0.2
-    elif action == "check_call":
-        if hand_strength == "weak":
-            return -10
+            if action == "fold":
+                return pot_value
+            elif action == "check_call":
+                return 0 
+            elif action == "bet_raise":
+                return -2 * pot_value
         elif hand_strength == "neutral":
-            return 0
+            if action == "fold":
+                return 0
+            elif action == "check_call":
+                return pot_value
+            elif action == "bet_raise":
+                return -pot_value
         elif hand_strength == "strong":
-            return 10
-    elif action == "bet_raise":
+            if action == "fold":
+                return -pot_value
+            elif action == "check_call":
+                return pot_value
+            elif action == "bet_raise":
+                return 2 * pot_value
+    elif stage == "flop":
         if hand_strength == "weak":
-            return -20
+            if action == "fold":
+                return 0 
+            elif action == "check_call":
+                return -pot_value
+            elif action == "bet_raise":
+                return -2 * pot_value
         elif hand_strength == "neutral":
-            return 10
+            if action == "fold":
+                return -pot_value
+            elif action == "check_call":
+                return pot_value
+            elif action == "bet_raise":
+                return 0 
         elif hand_strength == "strong":
-            return pot_value * 0.5
+            if action == "fold":
+                return -pot_value
+            elif action == "check_call":
+                return 0 
+            elif action == "bet_raise":
+                return pot_value
+    elif stage == "turn":
+        if hand_strength == "weak":
+            if action == "fold":
+                return -pot_value
+            elif action == "check_call":
+                return -2 * pot_value
+            elif action == "bet_raise":
+                return -3 * pot_value
+        elif hand_strength == "neutral":
+            if action == "fold":
+                return -2 * pot_value
+            elif action == "check_call":
+                return 0 
+            elif action == "bet_raise":
+                return -pot_value
+        elif hand_strength == "strong":
+            if action == "fold":
+                return -3 * pot_value
+            elif action == "check_call":
+                return pot_value
+            elif action == "bet_raise":
+                return 2 * pot_value
+    elif stage == "river":
+        if hand_strength == "weak":
+            if action == "fold":
+                return -3 * pot_value
+            elif action == "check_call":
+                return -4 * pot_value
+            elif action == "bet_raise":
+                return -5 * pot_value
+        elif hand_strength == "neutral":
+            if action == "fold":
+                return -pot_value
+            elif action == "check_call":
+                return -2 * pot_value
+            elif action == "bet_raise":
+                return -3 * pot_value
+        elif hand_strength == "strong":
+            if action == "fold":
+                return -2 * pot_value
+            elif action == "check_call":
+                return 2 * pot_value
+            elif action == "bet_raise":
+                return 3 * pot_value
     else:
-        raise ValueError("Unknown action: {}".format(action))
-
-def final_reward(winning, pot_size):
-    pot_value = {"small":10, "medium":50, "large":100}[pot_size]
-
-    if winning: 
-        return pot_value
-    else: 
-        return -pot_value
+        raise ValueError("Unknown stage: {}".format(stage))
 
 reward_table = {}
 for state in states:
@@ -147,9 +201,6 @@ for state in states:
 def observation_function(state, action, next_state):
     stage, hand_strength, pot_size = state
     next_stage, next_hand_strength, next_pot_size = next_state
-
-    if stage == "end":
-        return {}
    
     if action == "fold":
         return {}
@@ -268,8 +319,8 @@ class BeliefState:
 
 poker_env = PokerEnvironment(states, transition_table, reward_table)
 
-def value_iteration(belief_state, max_iterations=100, gamma=0.6, epsilon=0.01):
-    V = {state: 0 for state in states}
+def value_iteration(belief_state, max_iterations=100, gamma=0.8, epsilon=0.01):
+    V = {belief: 0 for belief in belief_state.beliefs}
 
     for iteration in range(max_iterations):
         delta = 0
@@ -286,7 +337,7 @@ def value_iteration(belief_state, max_iterations=100, gamma=0.6, epsilon=0.01):
                             for obs, obs_prob in obs_probs.items():
                                 reward = reward_table.get((state, action), 0)
                                 expected_value += (
-                                    belief_prob * trans_prob * obs_prob * (reward + gamma + V.get(next_state, 0))
+                                    belief_prob * trans_prob * obs_prob * (reward + gamma * V.get(next_state, 0))
                                 )
                 expected_values.append(expected_value)
             
@@ -298,10 +349,12 @@ def value_iteration(belief_state, max_iterations=100, gamma=0.6, epsilon=0.01):
         if delta < epsilon:
                 print(f"Belief Value Iteration converged after {iteration + 1} iterations")
                 break
-        return V
+        
+    return V
 
 def extract_policy(belief_state, V, gamma=0.6):
     policy = {}
+
     for belief in belief_state.beliefs:
         best_action = None
         max_value = float('-inf')
@@ -323,9 +376,9 @@ def extract_policy(belief_state, V, gamma=0.6):
             if expected_value > max_value:
                 max_value = expected_value
                 best_action = action
-            policy[belief] = best_action
+        policy[belief] = best_action
 
-        return policy
+    return policy
 
 states = [
     ('preflop', 'weak', 'small'), ('preflop', 'weak', 'medium'), ('preflop', 'weak', 'large'),
@@ -339,14 +392,17 @@ states = [
     ('turn', 'strong', 'small'), ('turn', 'strong', 'medium'), ('turn', 'strong', 'large'),
     ('river', 'weak', 'small'), ('river', 'weak', 'medium'), ('river', 'weak', 'large'),
     ('river', 'neutral', 'small'), ('river', 'neutral', 'medium'), ('river', 'neutral', 'large'),
-    ('river', 'strong', 'small'), ('river', 'strong', 'medium'), ('river', 'strong', 'large'),
-    ('end', 'none', 'none')
+    ('river', 'strong', 'small'), ('river', 'strong', 'medium'), ('river', 'strong', 'large')
 ]
 
 initial_belief_state = BeliefState(states)
 belief_values = value_iteration(initial_belief_state)
 optimal_policy = extract_policy(initial_belief_state, belief_values)
-print(optimal_policy)
+
+print(belief_values)
+#print(optimal_policy)
 
 # for belief, action in optimal_policy.items():
-#     print(f"Belief: {belief}, Action: {action}")
+#     likely_state = initial_belief_state.most_likely_state()
+#     reward = reward_function(likely_state, action)
+#     print(f"Belief: {belief}, State: {likely_state}, Action: {action}, Reward: {reward}")
