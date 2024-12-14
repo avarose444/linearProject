@@ -366,45 +366,95 @@ for state, action in optimal_policy.items():
     reward = reward_function(belief, action)
     print(f"State: {state}, Action: {action}, Reward: {reward}")
 
-# # BAR CHART
-# stages = ["preflop", "flop", "turn", "river"]
-# rewards_by_stage = {stage: [] for stage in stages}
+import matplotlib.pyplot as plt
 
-# for state, action in optimal_policy.items():
-#     stage, _, _ = state  
-#     reward = reward_function(state, action)  
-#     rewards_by_stage[stage].append(reward)
+# Group rewards by stage
+stages = ["preflop", "flop", "turn", "river"]
+rewards_by_stage = {stage: [] for stage in stages}
 
-# avg_rewards = {stage: sum(rewards) / len(rewards) for stage, rewards in rewards_by_stage.items()}
-# plt.figure(figsize=(12, 12))
-# plt.bar(avg_rewards.keys(), avg_rewards.values(), color='skyblue')
-# plt.title("Average Reward by Stage", fontsize=16)
-# plt.xlabel("Stage", fontsize=14)
-# plt.ylabel("Average Reward", fontsize=14)
-# plt.show()
+for state, action in optimal_policy.items():
+    stage, _, _ = state  # Extract the stage
+    reward = reward_function(state, action)  # Get the reward
+    rewards_by_stage[stage].append(reward)
 
-#HEATMAP
-import seaborn as sns
-import numpy as np
+# Calculate average reward per stage
+avg_rewards = {stage: sum(rewards) / len(rewards) for stage, rewards in rewards_by_stage.items()}
 
-heatmap_data = {stage: {"weak": 0, "neutral": 0, "strong": 0} for stage in stages}
-
-for state, belief_prob in initial_belief_state.beliefs.items():
-    stage, hand_strength, _ = state
-    heatmap_data[stage][hand_strength] += belief_prob
-
-heatmap_matrix = np.array([[heatmap_data[stage][hand] for hand in ["weak", "neutral", "strong"]] for stage in stages])
-
+# Bar chart
 plt.figure(figsize=(8, 6))
-sns.heatmap(
-    heatmap_matrix, annot=True, fmt=".2f", cmap="YlGnBu",
-    xticklabels=["Weak", "Neutral", "Strong"],
-    yticklabels=stages
-)
-plt.title("Belief State Probabilities by Stage and Hand Strength", fontsize=16)
-plt.xlabel("Hand Strength", fontsize=14)
-plt.ylabel("Stage", fontsize=14)
+plt.bar(avg_rewards.keys(), avg_rewards.values(), color='skyblue')
+plt.title("Average Reward by Stage", fontsize=16)
+plt.xlabel("Stage", fontsize=14)
+plt.ylabel("Average Reward", fontsize=14)
 plt.show()
+
+
+def plot_belief_updates(initial_belief, actions_taken, observations_received, transition_function, observation_function):
+    beliefs = [initial_belief.beliefs.copy()]
+    current_belief = initial_belief
+
+    for action, observation in zip(actions_taken, observations_received):
+        current_belief.update(action, observation, transition_function, observation_function)
+        beliefs.append(current_belief.beliefs.copy())
+
+    # Plot belief evolution
+    states = list(initial_belief.beliefs.keys())
+    for state in states:
+        belief_values = [b[state] for b in beliefs]
+        plt.plot(range(len(beliefs)), belief_values, label=str(state))
+
+    plt.xlabel('Step')
+    plt.ylabel('Belief Probability')
+    plt.title('Belief State Evolution')
+    plt.legend()
+    plt.show()
+
+# Example usage:
+initial_belief = BeliefState(states)
+actions_taken = ["check_call", "bet_raise"]
+observations_received = [("opp_check", "neutral_board", "small_pot"), ("opp_bet", "strong_board", "medium_pot")]
+plot_belief_updates(initial_belief, actions_taken, observations_received, transition_table, observation_table)
+
+mock_policy = {
+    ('preflop', 'weak', 'small'): 'fold',
+    ('preflop', 'weak', 'medium'): 'fold',
+    ('preflop', 'neutral', 'small'): 'check_call',
+    ('preflop', 'strong', 'large'): 'bet_raise',
+    ('flop', 'neutral', 'medium'): 'check_call',
+    ('turn', 'strong', 'large'): 'bet_raise',
+    # Add more states as needed
+}
+
+# Map actions to numerical values for visualization
+action_to_num = {'fold': 0, 'check_call': 1, 'bet_raise': 2}
+states = list(mock_policy.keys())
+actions = [action_to_num[mock_policy[state]] for state in states]
+
+# Create heatmap-friendly data
+stage_idx = {stage: i for i, stage in enumerate(stages)}
+hand_idx = {hand: i for i, hand in enumerate(hand_strengths)}
+pot_idx = {pot: i for i, pot in enumerate(pot_sizes)}
+
+heatmap = np.full((len(stages), len(hand_strengths), len(pot_sizes)), -1)
+
+for state, action in zip(states, actions):
+    stage, hand, pot = state
+    heatmap[stage_idx[stage], hand_idx[hand], pot_idx[pot]] = action
+
+# Plot the heatmap for one stage as a 2D grid
+plt.figure(figsize=(8, 6))
+for stage in stages:
+    stage_id = stage_idx[stage]
+    plt.matshow(heatmap[stage_id], cmap="coolwarm", fignum=False)
+    plt.colorbar(label="Action (0=Fold, 1=Check/Call, 2=Bet/Raise)")
+    plt.title(f"Optimal Actions for {stage.capitalize()} Stage")
+    plt.xlabel("Hand Strength")
+    plt.ylabel("Pot Size")
+    plt.xticks(range(len(hand_strengths)), hand_strengths)
+    plt.yticks(range(len(pot_sizes)), pot_sizes)
+    plt.show()
+
+
 
 
 
