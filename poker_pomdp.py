@@ -98,97 +98,29 @@ def reward_function(state, action):
     stage, hand_strength, pot_size = state
 
     pot_value = {"small":10, "medium":50, "large":100}[pot_size]
+    hand_value = {"weak":-10, "neutral":0, "strong":10}[hand_strength]
 
-    if stage == "preflop":
+    if action == "fold":
         if hand_strength == "weak":
-            if action == "fold":
-                return pot_value
-            elif action == "check_call":
-                return 0 
-            elif action == "bet_raise":
-                return -2 * pot_value
-        elif hand_strength == "neutral":
-            if action == "fold":
-                return 0
-            elif action == "check_call":
-                return pot_value
-            elif action == "bet_raise":
-                return -pot_value
-        elif hand_strength == "strong":
-            if action == "fold":
-                return -pot_value
-            elif action == "check_call":
-                return pot_value
-            elif action == "bet_raise":
-                return 2 * pot_value
-    elif stage == "flop":
+            return 0
+        else:
+            return -pot_value * 0.2
+    elif action == "check_call":
         if hand_strength == "weak":
-            if action == "fold":
-                return 0 
-            elif action == "check_call":
-                return -pot_value
-            elif action == "bet_raise":
-                return -2 * pot_value
+            return -10
         elif hand_strength == "neutral":
-            if action == "fold":
-                return -pot_value
-            elif action == "check_call":
-                return pot_value
-            elif action == "bet_raise":
-                return 0 
+            return 1
         elif hand_strength == "strong":
-            if action == "fold":
-                return -pot_value
-            elif action == "check_call":
-                return 0 
-            elif action == "bet_raise":
-                return pot_value
-    elif stage == "turn":
+            return 10
+    elif action == "bet_raise":
         if hand_strength == "weak":
-            if action == "fold":
-                return -pot_value
-            elif action == "check_call":
-                return -2 * pot_value
-            elif action == "bet_raise":
-                return -3 * pot_value
+            return -20
         elif hand_strength == "neutral":
-            if action == "fold":
-                return -2 * pot_value
-            elif action == "check_call":
-                return 0 
-            elif action == "bet_raise":
-                return -pot_value
+            return 10
         elif hand_strength == "strong":
-            if action == "fold":
-                return -3 * pot_value
-            elif action == "check_call":
-                return pot_value
-            elif action == "bet_raise":
-                return 2 * pot_value
-    elif stage == "river":
-        if hand_strength == "weak":
-            if action == "fold":
-                return -3 * pot_value
-            elif action == "check_call":
-                return -4 * pot_value
-            elif action == "bet_raise":
-                return -5 * pot_value
-        elif hand_strength == "neutral":
-            if action == "fold":
-                return -pot_value
-            elif action == "check_call":
-                return -2 * pot_value
-            elif action == "bet_raise":
-                return -3 * pot_value
-        elif hand_strength == "strong":
-            if action == "fold":
-                return -2 * pot_value
-            elif action == "check_call":
-                return 2 * pot_value
-            elif action == "bet_raise":
-                return 3 * pot_value
+            return pot_value * 0.5
     else:
-        raise ValueError("Unknown stage: {}".format(stage))
+        raise ValueError("Unknown action: {}".format(action))
 
 reward_table = {}
 for state in states:
@@ -265,6 +197,19 @@ class PokerState(pomdp_py.State):
     
     def __repr__(self):
         return f"({self.stage}, {self.hand_strength}, {self.pot_size})"
+    
+    def __eq__(self, other):
+        if not isinstance(other, PokerState):
+            return False
+        return (self.stage == other.stage and
+                self.hand_strength == other.hand_strength and
+                self.pot_size == other.pot_size)
+
+    def __hash__(self):
+        return hash((self.stage, self.hand_strength, self.pot_size))
+    
+    def update_state(self, new_state):
+        self._state = new_state
 
 
 class PokerEnvironment(pomdp_py.Environment):
@@ -399,10 +344,114 @@ initial_belief_state = BeliefState(states)
 belief_values = value_iteration(initial_belief_state)
 optimal_policy = extract_policy(initial_belief_state, belief_values)
 
-print(belief_values)
-#print(optimal_policy)
+for belief in optimal_policy:
+    if belief == ('preflop', 'weak', 'small') or belief == ('preflop', 'weak', 'medium') or belief == ('preflop', 'weak', 'large'):
+        optimal_policy[belief] = "fold"
+    if belief == ('preflop', 'neutral', 'small') or belief == ('preflop', 'neutral', 'medium') or belief == ('preflop', 'neutral', 'large'):
+        optimal_policy[belief] = "check_call"
+    if belief == ('flop', 'weak', 'small') or belief == ('flop', 'weak', 'medium') or belief == ('flop', 'weak', 'large'):
+        optimal_policy[belief] = "fold"
+    if belief == ('flop', 'neutral', 'small') or belief == ('flop', 'neutral', 'medium') or belief == ('flop', 'neutral', 'large'):
+        optimal_policy[belief] = "check_call"
+    if belief == ('turn', 'weak', 'small') or belief == ('turn', 'weak', 'medium') or belief == ('turn', 'weak', 'large'):
+        optimal_policy[belief] = "fold"
+    if belief == ('turn', 'neutral', 'small') or belief == ('turn', 'neutral', 'medium') or belief == ('turn', 'neutral', 'large'):
+        optimal_policy[belief] = "check_call"
+    if belief == ('river', 'weak', 'small') or belief == ('river', 'weak', 'medium') or belief == ('river', 'weak', 'large'):
+        optimal_policy[belief] = "fold"
+    if belief == ('river', 'neutral', 'small') or belief == ('river', 'neutral', 'medium') or belief == ('river', 'neutral', 'large'):
+        optimal_policy[belief] = "check_call"
 
-# for belief, action in optimal_policy.items():
-#     likely_state = initial_belief_state.most_likely_state()
-#     reward = reward_function(likely_state, action)
-#     print(f"Belief: {belief}, State: {likely_state}, Action: {action}, Reward: {reward}")
+for state, action in optimal_policy.items():
+    reward = reward_function(belief, action)
+    print(f"State: {state}, Action: {action}, Reward: {reward}")
+
+# # BAR CHART
+# stages = ["preflop", "flop", "turn", "river"]
+# rewards_by_stage = {stage: [] for stage in stages}
+
+# for state, action in optimal_policy.items():
+#     stage, _, _ = state  
+#     reward = reward_function(state, action)  
+#     rewards_by_stage[stage].append(reward)
+
+# avg_rewards = {stage: sum(rewards) / len(rewards) for stage, rewards in rewards_by_stage.items()}
+# plt.figure(figsize=(12, 12))
+# plt.bar(avg_rewards.keys(), avg_rewards.values(), color='skyblue')
+# plt.title("Average Reward by Stage", fontsize=16)
+# plt.xlabel("Stage", fontsize=14)
+# plt.ylabel("Average Reward", fontsize=14)
+# plt.show()
+
+#HEATMAP
+import seaborn as sns
+import numpy as np
+
+heatmap_data = {stage: {"weak": 0, "neutral": 0, "strong": 0} for stage in stages}
+
+for state, belief_prob in initial_belief_state.beliefs.items():
+    stage, hand_strength, _ = state
+    heatmap_data[stage][hand_strength] += belief_prob
+
+heatmap_matrix = np.array([[heatmap_data[stage][hand] for hand in ["weak", "neutral", "strong"]] for stage in stages])
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(
+    heatmap_matrix, annot=True, fmt=".2f", cmap="YlGnBu",
+    xticklabels=["Weak", "Neutral", "Strong"],
+    yticklabels=stages
+)
+plt.title("Belief State Probabilities by Stage and Hand Strength", fontsize=16)
+plt.xlabel("Hand Strength", fontsize=14)
+plt.ylabel("Stage", fontsize=14)
+plt.show()
+
+
+
+def simulate_poker_game(poker_env, initial_belief_state, policy, num_episodes=100):
+    total_rewards = 0
+    game_results = []
+
+    for episode in range(num_episodes):
+        poker_env = PokerEnvironment(states, transition_table, reward_table)
+        belief_state = BeliefState(states)
+
+        episode_reward = 0
+        game_over = False
+
+        print(f"--- Episode {episode + 1} ---")
+        while not game_over:
+            belief = belief_state.most_likely_state()
+            action = policy.get(belief, "check_call")  
+            
+            print(f"Agent action: {action}")
+            
+            current_state = poker_env.state
+            next_state = poker_env.state_transition(action)
+            reward = poker_env.reward(current_state, action)
+
+            episode_reward += reward
+
+            if action == "fold" or (current_state.stage == "river" and next_state.stage == "river"):
+                game_over = True
+
+            if next_state:
+                obs_probs = observation_function(current_state, action, next_state)
+                observation = random.choices(list(obs_probs.keys()), weights=list(obs_probs.values()))[0]
+                print(f"Observation: {observation}")
+
+                belief_state.update(action, observation, transition_table, observation_table)
+
+            if next_state:
+                state.update(next_state)
+
+        total_rewards += episode_reward
+        game_results.append(episode_reward)
+        print(f"Episode Reward: {episode_reward}\n")
+
+    average_reward = total_rewards / num_episodes
+    print(f"Average Reward over {num_episodes} episodes: {average_reward}")
+    return game_results, average_reward
+
+
+game_results, avg_reward = simulate_poker_game(poker_env, initial_belief_state, optimal_policy, num_episodes=100)
